@@ -1,0 +1,170 @@
+---
+title: "HW8"
+author: "Dhanvin Lakshmisha"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    df_print: paged
+---
+
+Dhanvin Lakshmisha
+
+dl37833
+
+SDS 315
+
+GitHub link - https://github.com/DhanvinL/SDS315-HW8
+
+
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(knitr)
+library(mosaic)
+library(MatchIt)
+
+creatinine <- read.csv("creatinine.csv")
+covid <- read.csv("covid.csv")
+milk <- read.csv("milk.csv")
+
+
+```
+
+## Question 1
+
+### Part A
+
+First, we fit the model. Then we can find the coefficients. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+model_creat <- lm(creatclear ~ age, data = creatinine)
+coef(model_creat)
+```
+147.81 - (0.62)(55) = 113.71
+
+So, for a 55-year-old,we would expect a clearance rate of around 113.71 mL/minute. I got this value by taking the equation, clearance rate = 147.81 -0.619 * (age), and inputting 55 as the age. 
+
+### Part B
+
+Creatinine clearance rate decreases by 0.619 mL/minute for each additional year of age. This was based on the slope or age coefficient from the linear model.
+
+
+### Part C
+
+Based, on the equation, we would expect the 40 year old to get a clearance rate of 123.01 mL/minute (147.81 - (0.62) (40)). Also, we would expect the 60 year old to get a clearance rate of 110.61 mL/minute (147.81 - (0.62) (60)). If we compare the actual - predicted clearance rate for each age, we get a difference of 11.99 (which is 135 - 123.01) for the 40-year-old and a difference of 1.39 (which is 112 - 110.61) for the 60-year-old. Thus, compared to their expected clearance rate, the 40-year-old is healthier relative to their age due to them having a higher difference. 
+
+## Question 2
+
+We can fit a linear model on log(deaths).
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+covid_filt <- covid |>
+  filter(deaths > 0) |> 
+  mutate(log_deaths = log(deaths))
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+model_italy <- lm(log_deaths ~ days_since_first_death, data = filter(covid_filt, country == "Italy"))
+model_spain <- lm(log_deaths ~ days_since_first_death, data = filter(covid_filt, country == "Spain"))
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+growth_italy <- coef(model_italy)["days_since_first_death"]
+growth_spain <- coef(model_spain)["days_since_first_death"]
+
+growth_italy <- round(growth_italy, 3)
+growth_spain <- round(growth_spain, 3)
+
+doubling_italy <- 70 / growth_italy
+doubling_spain <- 70 / growth_spain
+
+doubling_italy <- round(doubling_italy, 1)
+doubling_spain <- round(doubling_spain, 1)  
+```
+For Italy, the growth rate of the daily death total is approximately `r growth_italy` and the doubling time is approximately `r doubling_italy` days. For Spain, the growth rate is approximately `r growth_spain` and the doubling time is approximately `r doubling_spain` days.
+
+### Part A
+Here is a 95 percent confidence interval for the slope "days_since_first_death" or the growth rate of Italy.
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+bootstrap_italy <- do(1000) * 
+  lm(log_deaths ~ days_since_first_death, data = resample(filter(covid_filt, country == "Italy")))
+slopes_italy <- bootstrap_italy$days_since_first_death
+conf <- quantile(slopes_italy, probs = c(0.025, 0.975))
+conf
+
+```
+We are 95% confident that the true growth rate lies between `r conf`.
+
+
+Here is a 95 percent confidence interval for the doubling time of daily COVID deaths based on Italy's growth rate. 
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+doub_italy <- 70 / conf
+doub_italy
+```
+We are 95 percent confidence that the true doubling time of daily COVID deaths for Italy is between that range.
+
+### Part B
+For Spain, here is a 95 percent confidence interval for its growth rate. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+bootstrap_spain <- do(1000) * 
+  lm(log_deaths ~ days_since_first_death, data = resample(filter(covid_filt, country == "Spain")))
+slopes_spain <- bootstrap_spain$days_since_first_death
+conf1 <- quantile(slopes_spain, probs = c(0.025, 0.975))
+conf1
+
+```
+We are 95% confident that the true growth rate lies between `r conf1`.
+
+
+Here is a 95 percent confidence interval for the doubling time of daily COVID deaths based on Spain's growth rate. 
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+doub_spain <- 70 / conf1
+doub_spain
+```
+We are 95 percent confidence that the true doubling time of daily COVID deaths for Spain is between that range.
+
+### Part C
+Here is a line graph showing reported daily deaths over time for each country.
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+ggplot(covid) + 
+  geom_line(aes(x = days_since_first_death, y = deaths, color = country)) + 
+  labs(
+    x = "Days Since First Death", 
+    y = "Reported Deaths", 
+    title = "Daily Reported COVID-19 Deaths between Italy and Spain",
+    color = "Country"
+  )
+
+```
+
+
+### Question 3
+
+The elasticity of the model, derived from the log version of the power-law model, is - 
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+milk <- milk |>
+  filter(sales > 0 & price > 0) |> 
+  mutate(log_sales = log(sales), log_price = log(price))
+model <- lm(log_sales ~ log_price, data = milk)
+
+elasticity <- coef(model)["log_price"]
+
+elasticity
+```
+
+Now, we can bootstrap that elasticity to generate a 95 percent confidence interval. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+boot <- do(1000) * lm(log_sales ~ log_price, data = resample(milk))
+conf_elast <- confint(boot$log_price, level = .95)
+conf_elast
+```
+We are 95 percent confident that the true elasticity is between `r conf_elast$"2.5"` and `r conf_elast$"97.5"`. 
+
+To estimate the elasticity, I first fitted a log-log linear model to the power-law model. I took the logs of both "sales" and "price" and used those as parameters for creating a linear regression model, with the y-value being "log_sales" and the predictor being "log_price". I interpreted the slope of this linear model as the elasticity due to how the log-log equation was derived. The estimate I derived was `r elasticity`. I then bootstrapped the linear model, using a 1000 resamples, to construct a 95 percent confidence interval for the estimate. Finally, I got a 95 percent confidence interval of (`r c(conf_elast$"2.5", conf_elast$"97.5")`). We are 95 percent confident that the true elasticity of milk is in that interval. 
